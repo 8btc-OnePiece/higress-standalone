@@ -10,7 +10,7 @@ FROM ${HUB}/api-server:${APISERVER_VERSION} AS apiserver
 FROM ${HUB}/higress:${CORE_VERSION} AS controller
 FROM ${HUB}/pilot:${CORE_VERSION} AS pilot
 FROM ${HUB}/gateway:${CORE_VERSION} AS gateway
-FROM ${HUB}/console:${CONSOLE_VERSION} AS console
+FROM swr.cn-east-3.myhuaweicloud.com/btc8_public/higress/higress-console:1.0.0 AS console
 FROM ${HUB}/eclipse-temurin:21-jre AS jdk
 FROM ${HUB}/plugin-server:${PLUGIN_SERVER_VERSION} AS plugin-server
 
@@ -29,6 +29,7 @@ COPY --from=pilot /usr/local/bin/higress-pilot-start.sh /usr/local/bin/higress-p
 # Install gateway
 COPY --from=gateway /var/lib/istio/envoy/*.json /var/lib/istio/envoy/
 COPY --from=gateway /var/lib/istio/envoy/*.so /var/lib/istio/envoy/
+COPY --from=gateway /usr/local/bin/envoy /usr/local/bin/envoy
 COPY --from=gateway /usr/local/bin/pilot-agent /usr/local/bin/pilot-agent
 COPY --from=gateway /usr/local/bin/higress-proxy-*.sh /usr/local/bin/
 RUN chmod a+x /usr/local/bin/higress-proxy-container-init.sh; \
@@ -56,6 +57,7 @@ RUN arch="$(dpkg --print-architecture)"; \
     arm64) envoy_arch="arm64" ;; \
     *) echo "Unsupported architecture: $arch" && exit 1 ;; \
   esac; \
+  unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY; \
   apt-get update --allow-unauthenticated; \
   apt-get install --no-install-recommends -y --allow-unauthenticated \
     wget supervisor logrotate cron nginx; \
@@ -67,6 +69,7 @@ RUN arch="$(dpkg --print-architecture)"; \
   rm /tmp/envoy.tar.gz && \
   chmod +x /usr/local/bin/envoy; \
   arch="${arch##*-}"; \
+  unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY; \
   wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_$arch -O /usr/local/bin/yq && chmod +x /usr/local/bin/yq; \
   mkdir -p /var/log/higress; \
   mkdir /data;
