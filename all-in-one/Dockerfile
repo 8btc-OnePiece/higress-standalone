@@ -49,30 +49,26 @@ COPY --from=jdk $JAVA_HOME $JAVA_HOME
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
 # Install supervisord, logrotate, cron and initialize related folders
-# Also download optimized envoy binary
-ARG ENVOY_VERSION
-RUN arch="$(dpkg --print-architecture)"; \
-  case "$arch" in \
-    amd64) envoy_arch="amd64" ;; \
-    arm64) envoy_arch="arm64" ;; \
-    *) echo "Unsupported architecture: $arch" && exit 1 ;; \
-  esac; \
-  unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY; \
+RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY; \
+  if grep -qi 'ubuntu' /etc/os-release; then \
+        sed -i 's@http://\(security\|archive\).ubuntu.com@http://mirrors.aliyun.com@g' /etc/apt/sources.list; \
+    else \
+        sed -i 's@http://\(security\|deb\).debian.org@http://mirrors.aliyun.com@g' /etc/apt/sources.list; \
+    fi && \
   apt-get update --allow-unauthenticated; \
   apt-get install --no-install-recommends -y --allow-unauthenticated \
-    wget supervisor logrotate cron nginx; \
-  apt-get upgrade -y --allow-unauthenticated; \
-  apt-get clean; \
-  rm -rf /var/log/*log /var/lib/apt/lists/* /var/log/apt/* /var/lib/dpkg/*-old /var/cache/debconf/*-old; \
-  wget -q "https://github.com/higress-group/proxy/releases/download/v${ENVOY_VERSION}/envoy-${envoy_arch}.tar.gz" -O /tmp/envoy.tar.gz && \
-  tar -xzf /tmp/envoy.tar.gz -C / && \
+    supervisor logrotate cron nginx; \
+  mkdir -p /var/log/higress; \
+  mkdir -p /opt/data/defaultConfig && \
+  mkdir -p /opt/data/defaultConfig/gateways;
+
+# Copy local envoy and yq files (faster than downloading)
+COPY --chown=root:root ./envoy-amd64.tar.gz /tmp/envoy.tar.gz
+COPY --chown=root:root ./yq_linux_amd64 /usr/local/bin/yq
+RUN tar -xzf /tmp/envoy.tar.gz -C / && \
   rm /tmp/envoy.tar.gz && \
   chmod +x /usr/local/bin/envoy; \
-  arch="${arch##*-}"; \
-  unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY; \
-  wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_$arch -O /usr/local/bin/yq && chmod +x /usr/local/bin/yq; \
-  mkdir -p /var/log/higress; \
-  mkdir /data;
+  chmod +x /usr/local/bin/yq;
 
 COPY ./supervisord/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
